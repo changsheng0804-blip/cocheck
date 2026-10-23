@@ -58,19 +58,21 @@ class Provider:
     def ask(self, ticket):
         raise NotImplementedError('%s 不支持 ask' % self.name)
 
-    def ask_batch(self, tickets, jobs=1):
-        """返回 {单号: answers}；某张失败就不在结果里（下次再领）。"""
+    def ask_batch(self, tickets, jobs=1, on_done=None):
+        """返回 {单号: answers}；某张失败就不在结果里（下次再领）。on_done(单号, answers) 每答完一张就回调（进度、及时落盘）。"""
         def one(t):
             err = None
             for attempt in range(5):
                 try: return t['id'], self.ask(t)
                 except Exception as e:                       # 429 限流指数退避，其余短重试
                     err = e; time.sleep((4 * 2 ** attempt) if '429' in str(e) else 2 + attempt * 3)
-            print('[%s] %s 没答上：%s' % (self.name, t['id'], err)); return t['id'], None
+            print('[%s] %s 没答上：%s' % (self.name, t['id'], err), flush=True); return t['id'], None
         out = {}
         with ThreadPoolExecutor(max(1, jobs)) as ex:
             for tid, a in ex.map(one, tickets):
-                if a: out[tid] = a
+                if a:
+                    out[tid] = a
+                    if on_done: on_done(tid, a)
         return out
 
     def ping(self):
