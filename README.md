@@ -52,6 +52,15 @@ agy mcp add cocheck cocheck mcp --by agy                       # Antigravity CLI
 # {"cocheck": {"command": "cocheck", "args": ["mcp", "--by", "claude"], "env": {"COCHECK_URL": "http://127.0.0.1:8796"}}}
 ```
 
+别的机器上的 AI 用 HTTP 版（MCP Streamable HTTP，同一组工具）：
+
+```bash
+COCHECK_TOKEN=$(openssl rand -hex 16) cocheck serve --host 0.0.0.0     # 对外开放必须设令牌，否则拒绝启动
+# 客户端：{"cocheck": {"url": "http://<主机>:8796/mcp", "headers": {"Authorization": "Bearer <令牌>", "X-Cocheck-By": "claude"}}}
+```
+
+设了令牌后所有 /v1 接口和 /mcp 都要带 `Authorization: Bearer`（页面组件传 `token`，cocut 读 `COCHECK_TOKEN`）。
+
 然后对 AI 说「用 cocheck 把项目 lan 的待复核单都答完」即可；它答的票以 `--by` 的名字计入多人判定。
 
 ## 接到自己的页面
