@@ -90,6 +90,12 @@ cocheck serve --host 0.0.0.0     # 令牌取 $COCHECK_TOKEN 或 ~/.config/cochec
 
 服务会监视适配器声明的数据文件，一变就自动体检、开单、唤起复核员。
 
+## 测试
+
+```bash
+python -m unittest discover -s tests     # 不联网、不加载真模型：开单/过期/改回、判定、429 重试、并发交卷、令牌、HTTP 与 stdio MCP
+```
+
 ## 实测（《懒》16 拍，Mac M 系列）
 
 - 体检全片约 53 秒（冷），改一拍约 2 秒
