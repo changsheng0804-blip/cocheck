@@ -3,6 +3,7 @@
   cocheck doctor [--ping]                    环境自检：依赖、设备、配置、各 provider 是否连得上
   cocheck providers                          列出 provider 和能力
   cocheck serve [--port 8796] [--project 名=适配器:路径 ...]
+  cocheck mcp [--url http://127.0.0.1:8796] [--by 名字]   MCP 服务（stdio），给任何支持 MCP 的 AI 领单交卷
   cocheck check  <项目|适配器:路径>           体检 + 开单
   cocheck review <项目> [--provider X --jobs N --escalate]   不给 provider = 按配置的复核员链
   cocheck status <项目>
@@ -61,6 +62,8 @@ def main(argv=None):
     sub.add_parser('providers')
     s = sub.add_parser('serve'); s.add_argument('--host', default='127.0.0.1'); s.add_argument('--port', type=int, default=8796)
     s.add_argument('--project', action='append'); s.add_argument('--token', default=os.environ.get('COCHECK_TOKEN'))
+    s = sub.add_parser('mcp'); s.add_argument('--url', default=os.environ.get('COCHECK_URL', 'http://127.0.0.1:8796'))
+    s.add_argument('--by', default=os.environ.get('COCHECK_BY', 'mcp')); s.add_argument('--token', default=os.environ.get('COCHECK_TOKEN'))
     s = sub.add_parser('check'); s.add_argument('project')
     s = sub.add_parser('review'); s.add_argument('project'); s.add_argument('--provider'); s.add_argument('--jobs', type=int, default=1)
     s.add_argument('--escalate', action='store_true'); s.add_argument('--second', action='store_true'); s.add_argument('--by')
@@ -68,6 +71,8 @@ def main(argv=None):
     s = sub.add_parser('answer'); s.add_argument('project'); s.add_argument('ticket'); s.add_argument('answers'); s.add_argument('--by', required=True); s.add_argument('--note')
     a = ap.parse_args(argv)
     if a.cmd == 'doctor': return doctor(a)
+    if a.cmd == 'mcp':
+        from .mcp import serve as mcp_serve; return mcp_serve(a.url, a.by, a.token)
     e = _engine(a)
     if a.cmd == 'providers': return print(json.dumps(e.reg.info(), ensure_ascii=False, indent=1))
     if a.cmd == 'serve':
