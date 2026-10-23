@@ -121,7 +121,7 @@ def make_handler(engine, token=None, self_url='http://127.0.0.1:8796'):
                     if what == 'answer': return self._send(*pr.store.answer(b['ticket'], b['by'], b.get('answers', {}), b.get('note')))
                     if what == 'check': pr.request_check(); return self._send(dict(ok=True, check=pr.check_state))
                     if b.get('provider'):
-                        threading.Thread(target=pr.review_once, args=(b['provider'], b.get('jobs', 1), b.get('escalate', False)), daemon=True).start()
+                        pr.request_review([dict(provider=b['provider'], jobs=b.get('jobs', 1), escalate=b.get('escalate', False), **({'by': b['by']} if b.get('by') else {}))])
                     else: pr.request_review()
                     return self._send(dict(ok=True, reviewers=pr.review_state))
                 return self._send({'error': 'not found'}, 404)
