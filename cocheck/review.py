@@ -5,7 +5,7 @@
   answers  单号 -> {复核员: {answers: {题号: yes|no|unsure}, at, note?}}
 单号 = 条目id-指纹；指纹覆盖图、配音、画面说明、文案、实际读法、读音要求，任何一样变了旧单过期。
 """
-import hashlib, json, os, time
+import hashlib, json, os, threading, time
 
 NEAR_TEXT = -0.015          # 文字分接近阈值也送复核（反射层阈值 -0.008）
 POSITIVE = {'text': 'yes'}  # 这些题答 yes 说明有问题；其余题（是不是/有没有/读得对不对）答 no 说明有问题
@@ -16,7 +16,9 @@ HUMAN = 'user'              # 人的裁决是最终的
 def fingerprint(x):
     h = hashlib.sha1()
     for p in (x.get('image'), x.get('audio')):
-        h.update(open(p, 'rb').read() if p and os.path.exists(p) else b'-')
+        if p and os.path.exists(p):
+            with open(p, 'rb') as f: h.update(f.read())
+        else: h.update(b'-')
     h.update(json.dumps([x.get('desc'), x.get('text'), x.get('say'), x.get('poly')], ensure_ascii=False, sort_keys=True).encode())
     return h.hexdigest()[:10]
 
@@ -57,17 +59,26 @@ def verdict(t, by_reviewer):
 
 
 class Store:
+    _locks = {}                                  # 同一个 review.json 一把锁：多个 AI 同时交卷不丢答案
+
     def __init__(self, path):
         self.dir = path; os.makedirs(path, exist_ok=True); self.f = os.path.join(path, 'review.json')
+        self.lock = Store._locks.setdefault(os.path.abspath(self.f), threading.RLock())
 
     def load(self):
-        return json.load(open(self.f, encoding='utf-8')) if os.path.exists(self.f) else {'tickets': {}, 'answers': {}}
+        if not os.path.exists(self.f): return {'tickets': {}, 'answers': {}}
+        with open(self.f, encoding='utf-8') as f: return json.load(f)
 
     def save(self, db):
-        tmp = self.f + '.tmp'; json.dump(db, open(tmp, 'w', encoding='utf-8'), ensure_ascii=False, indent=1); os.replace(tmp, self.f)
+        tmp = '%s.%d.tmp' % (self.f, threading.get_ident())
+        with open(tmp, 'w', encoding='utf-8') as f: json.dump(db, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, self.f)
 
     # ---- 开单 ----
     def open_tickets(self, items, report):
+        with self.lock: return self._open_tickets(items, report)
+
+    def _open_tickets(self, items, report):
         R = report.get('items', report); db = self.load(); now = time.strftime('%Y-%m-%d %H:%M:%S')
         out = dict(opened=[], cleared=[], stale=[], kept=[])
         for x in items:
@@ -95,6 +106,9 @@ class Store:
                 and (only is None or t['id'] in only)]
 
     def answer(self, tid, by, answers, note=None):
+        with self.lock: return self._answer(tid, by, answers, note)
+
+    def _answer(self, tid, by, answers, note=None):
         db = self.load(); t = db['tickets'].get(tid)
         if not t: return {'error': f'没有这张单：{tid}'}, 404
         if t['status'] == 'stale': return {'error': '这张单已过期（素材或文案改过），请重新体检后领新单'}, 409
