@@ -1,0 +1,20 @@
+{
+  "providers": {
+    "eg2":    {"type": "local_embed", "model": "google/embeddinggemma-2", "device": "auto", "offline": true},
+    "flash":  {"type": "cli", "cmd": "agy --model gemini-3.8-flash --dangerously-skip-permissions -p {prompt}",
+               "env": {"PATH": "${HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"}},
+    "g4":     {"type": "gemini", "base_url": "http://127.0.0.1:8050", "model": "gemini-4-argon", "note": "本机 Vertex 桥"},
+    "gemini": {"type": "gemini", "model": "gemini-3.8-flash", "api_key": "${GEMINI_API_KEY}"},
+    "router": {"type": "openai", "base_url": "https://openrouter.ai/api/v1", "model": "google/gemini-3.8-flash", "api_key": "${OPENROUTER_API_KEY}"},
+    "mac":    {"type": "remote", "base_url": "http://mac.local:8796", "provider": "eg2", "token": "${COCHECK_TOKEN}"}
+  },
+  "embed": "eg2",
+  "reviewers": [
+    {"provider": "flash", "jobs": 4},
+    {"provider": "g4", "jobs": 3, "escalate": true, "by": "gemini"}
+  ],
+  "projects": {
+    "lan": {"adapter": "cocut", "path": "~/hark-sandbox-CS/cocut-lab/film-lan"}
+  },
+  "auto": {"check": true, "review": true}
+}
