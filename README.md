@@ -25,11 +25,14 @@
 ## 快速开始
 
 ```bash
-pip install -e .[check]          # 只复核；要本地体检再加 [local]，多音字检查加 [tts]（需 ffmpeg）
-cp examples/config.example.json cocheck.json   # 按需删改 providers / projects
+pip install "git+ssh://git@github.com/changsheng0804-blip/cocheck.git"            # 基础：复核、服务、MCP
+pip install "cocheck[local,tts] @ git+ssh://git@github.com/changsheng0804-blip/cocheck.git"   # 加本地向量模型体检和多音字检查（需 ffmpeg）
+cocheck init --project lan=~/films/lan@cocut   # 写 ~/.config/cocheck/config.json 和令牌文件；适配器 cocut/items/folder
 cocheck doctor --ping            # 环境自检：依赖、设备、配置、每个模型是否连得上
 cocheck serve                    # http://127.0.0.1:8796
 ```
+
+配置只在用户目录（或 `--config` / `$COCHECK_CONFIG` / 当前目录的 cocheck.json），密钥写成 `${环境变量}`；完整示例见 examples/config.example.json。开发时用 `pip install -e .`。
 
 不开服务也能用：
 
@@ -55,11 +58,11 @@ agy mcp add cocheck cocheck mcp --by agy                       # Antigravity CLI
 别的机器上的 AI 用 HTTP 版（MCP Streamable HTTP，同一组工具）：
 
 ```bash
-COCHECK_TOKEN=$(openssl rand -hex 16) cocheck serve --host 0.0.0.0     # 对外开放必须设令牌，否则拒绝启动
+cocheck serve --host 0.0.0.0     # 令牌取 $COCHECK_TOKEN 或 ~/.config/cocheck/token（cocheck init 生成）；没令牌拒绝对外开放
 # 客户端：{"cocheck": {"url": "http://<主机>:8796/mcp", "headers": {"Authorization": "Bearer <令牌>", "X-Cocheck-By": "claude"}}}
 ```
 
-设了令牌后所有 /v1 接口和 /mcp 都要带 `Authorization: Bearer`（页面组件传 `token`，cocut 读 `COCHECK_TOKEN`）。
+设了令牌后所有 /v1 接口和 /mcp 都要带 `Authorization: Bearer`（页面组件传 `token`，cocut 读 `COCHECK_TOKEN`）。同机的 `cocheck mcp` 自动读令牌文件。
 
 然后对 AI 说「用 cocheck 把项目 lan 的待复核单都答完」即可；它答的票以 `--by` 的名字计入多人判定。
 
