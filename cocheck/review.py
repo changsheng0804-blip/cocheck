@@ -5,7 +5,7 @@
   answers  单号 -> {复核员: {answers: {题号: yes|no|unsure}, at, note?}}
 单号 = 条目id-指纹；指纹覆盖图、配音、画面说明、文案、实际读法、读音要求，任何一样变了旧单过期。
 """
-import hashlib, json, os, threading, time
+import hashlib, json, os, re, threading, time
 
 NEAR_TEXT = -0.015          # 文字分接近阈值也送复核（反射层阈值 -0.008）
 POSITIVE = {'text': 'yes'}  # 这些题答 yes 说明有问题；其余题（是不是/有没有/读得对不对）答 no 说明有问题
@@ -19,18 +19,24 @@ def fingerprint(x):
         if p and os.path.exists(p):
             with open(p, 'rb') as f: h.update(f.read())
         else: h.update(b'-')
-    h.update(json.dumps([x.get('desc'), x.get('text'), x.get('say'), x.get('poly')], ensure_ascii=False, sort_keys=True).encode())
+    h.update(json.dumps([x.get('desc'), x.get('text'), x.get('say'), x.get('poly')] + ([x['expect_text']] if x.get('expect_text') is not None else []), ensure_ascii=False, sort_keys=True).encode())
     return h.hexdigest()[:10]
 
 
 def asks_for(x, r):
     """把一个条目的体检结果翻译成点名是非题。"""
     asks = []; ti = r.get('text_in_image') or {}; cov = r.get('coverage') or {}
-    if ti.get('flag') or ti.get('score', -1) > NEAR_TEXT:
+    exp = x.get('expect_text')                     # 画里有意设计的字（路牌、片名…）：不问「有没有字」，问「字对不对」
+    if exp is not None and not exp: pass             # expected_text: [] = 这拍允许有字、不核对
+    elif exp:
+        asks.append(dict(k='text', tile=ti.get('tile'), expect=exp, q='画面里允许出现的有意文字：%s（不一定都出现）。画面里的字有没有错字、乱码，或这些之外多余的字？' % '、'.join('「%s」' % e for e in exp)))
+    elif ti.get('flag') or ti.get('score', -1) > NEAR_TEXT:
         where = TILE[ti['tile']] if isinstance(ti.get('tile'), int) and ti['tile'] < 9 else ''
         asks.append(dict(k='text', tile=ti.get('tile'), q='画面里有没有任何可见的字母、单词或文字（包括小字、手写、编号）？' + (f'重点看{where}。' if where else '')))
     if cov.get('swap'):
-        asks.append(dict(k='swap', q=f'这张图画的是不是这个场景：「{x.get("desc", "")}」？'))
+        from .checks import Reflex                   # 场景题只问画面：去掉声音分句
+        vis = '，'.join(c for c in re.split(r'[，；。;]', x.get('desc') or '') if c.strip() and not Reflex.SOUND.search(c)) or x.get('desc', '')
+        asks.append(dict(k='swap', q=f'这张图画的是不是这个场景：「{vis}」？'))
     else:
         for el in cov.get('missing') or []:
             asks.append(dict(k='el', el=el, q=f'画面里有没有：「{el}」？画错了也算没有；静态图看不出的动作答 unsure。'))
@@ -52,7 +58,7 @@ def verdict(t, by_reviewer):
         votes = {r: x['answers'].get(a['i'], 'unsure') for r, x in by_reviewer.items()}
         nb = [r for r, v in votes.items() if v == bad_v]; ng = [r for r, v in votes.items() if v == good_v]
         if nb and len(nb) >= len(ng):
-            problems.append(dict(k=a['k'], what=a.get('el') or a.get('ch') or a['k'], by=nb, against=ng))
+            problems.append(dict(k=a['k'], what=a.get('el') or a.get('ch') or ('expect' if a.get('expect') else a['k']), by=nb, against=ng))
         elif not nb and not ng: unsure.append(a.get('el') or a['k'])
     color = 'red' if problems else 'yellow' if unsure and len(unsure) == len(t['asks']) else 'green'
     return dict(color=color, problems=problems, unsure=unsure, reviewers=sorted(by_reviewer), final=final)
