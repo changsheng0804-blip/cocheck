@@ -13,6 +13,7 @@
   POST /v1/projects/<p>/answer {ticket, by, answers, note?}
   POST /v1/projects/<p>/check              立即体检
   POST /v1/projects/<p>/review {provider?, jobs?, escalate?}   不给 provider = 按配置的复核员链跑
+  POST /v1/projects/<p>/review/cancel      取消复核员链（正在问的一批问完即停）
 网页组件：GET /cocheck-strip.js
 MCP（Streamable HTTP）：POST /mcp   远端 AI 直接接：{"url": "http://<主机>:8796/mcp", "headers": {"Authorization": "Bearer <token>"}}
   复核员名字用请求头 X-Cocheck-By 或 URL ?by=，缺省 mcp-http。
@@ -110,7 +111,10 @@ def make_handler(engine, token=None, self_url='http://127.0.0.1:8796'):
                         return self._send(dict(provider=prov.name, answers=prov.ask(t)))
                     finally: shutil.rmtree(work, ignore_errors=True)
                 if p == '/v1/projects':
+                    b.setdefault('reviewers', False)                 # 运行时登记默认不自动花模型额度；要复核员链显式给 true 或列表
                     pr = engine.add_project(b.pop('name'), b); pr.request_check(); return self._send(pr.summary())
+                m = re.match(r'^/v1/projects/([^/]+)/review/cancel$', p)
+                if m: return self._send(dict(ok=True, reviewers=engine.project(m.group(1)).cancel_review()))
                 m = re.match(r'^/v1/projects/([^/]+)/(answer|check|review)$', p)
                 if m:
                     pr = engine.project(m.group(1)); what = m.group(2)
