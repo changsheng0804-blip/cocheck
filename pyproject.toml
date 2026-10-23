@@ -1,13 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "cocheck"
 version = "0.1.0"
 description = "AI 智能审核：反射层体检 + 点名复核 + 统一模型接入口（本地/云端模型同一套 /v1 接口）"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = ["numpy", "pillow"]
 
 [project.optional-dependencies]
-check = ["numpy", "pillow"]
-local = ["numpy", "pillow", "torch", "sentence-transformers>=6", "transformers>=5"]
+check = []
+local = ["torch", "sentence-transformers>=6", "transformers>=5"]
 tts = ["edge-tts"]
 
 [project.scripts]
@@ -15,3 +19,6 @@ cocheck = "cocheck.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["cocheck*"]
+
+[tool.setuptools.package-data]
+cocheck = ["web/*.js"]
