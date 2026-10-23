@@ -69,7 +69,9 @@ def make_handler(engine, token=None):
                         base = '/v1/projects/%s/media/' % pr.name
                         return self._send(dict(tickets=[dict({k: v for k, v in t.items() if k not in ('image', 'audio')},
                                                              image=base + t['id'] + '/image' if t.get('image') else None,
-                                                             audio=base + t['id'] + '/audio' if t.get('audio') else None) for t in ts]))
+                                                             audio=base + t['id'] + '/audio' if t.get('audio') else None,
+                                                             image_name=os.path.basename(t['image']) if t.get('image') else None,
+                                                             audio_name=os.path.basename(t['audio']) if t.get('audio') else None) for t in ts]))
                     t = pr.store.load()['tickets'].get(m.group(3)); f = t and t.get(m.group(4))
                     if not f or not os.path.exists(f): return self._send({'error': '没有这个文件'}, 404)
                     from .providers.base import MIME
