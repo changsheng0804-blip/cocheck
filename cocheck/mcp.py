@@ -6,7 +6,7 @@
 接到 AI 客户端（以 Claude Desktop / Gemini CLI 的 mcpServers 配置为例）：
   {"mcpServers": {"cocheck": {"command": "cocheck", "args": ["mcp", "--by", "claude"]}}}
 """
-import base64, json, os, sys, urllib.request, urllib.error
+import base64, json, os, sys, urllib.parse, urllib.request, urllib.error
 
 PROTOCOL = '2025-06-18'
 MIME = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.mp3': 'audio/mpeg', '.wav': 'audio/wav'}
@@ -32,14 +32,18 @@ TOOLS = [
 
 
 class Client:
-    def __init__(self, url, token=None): self.url = url.rstrip('/'); self.token = token
+    def __init__(self, url, token=None):
+        self.url = url.rstrip('/'); self.token = token
+        host = urllib.parse.urlparse(self.url).hostname or ''
+        # 本机地址不走系统代理（有 http_proxy 的机器上 urllib 会把 127.0.0.1 也送去代理）
+        self.open = urllib.request.build_opener(urllib.request.ProxyHandler({})).open if host in ('127.0.0.1', 'localhost', '::1') else urllib.request.urlopen
 
     def _req(self, path, body=None, raw=False):
         h = {'Content-Type': 'application/json'}
         if self.token: h['Authorization'] = 'Bearer ' + self.token
         req = urllib.request.Request(self.url + path, data=None if body is None else json.dumps(body).encode(), headers=h)
         try:
-            r = urllib.request.urlopen(req, timeout=120); return r.read() if raw else json.load(r)
+            r = self.open(req, timeout=120); return r.read() if raw else json.load(r)
         except urllib.error.HTTPError as e:
             try: msg = json.load(e).get('error')
             except Exception: msg = str(e)
