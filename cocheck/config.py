@@ -28,3 +28,40 @@ def load(path=None):
     p = find(path); cfg = json.loads(json.dumps(DEFAULT))
     if p: cfg.update(_expand(json.load(open(p, encoding='utf-8'))))
     cfg['_path'] = p; return cfg
+
+
+HOME = os.path.expanduser('~/.config/cocheck')
+
+
+def token():
+    """令牌：$COCHECK_TOKEN，否则 ~/.config/cocheck/token（cocheck init 生成）。"""
+    t = os.environ.get('COCHECK_TOKEN')
+    if t: return t
+    f = os.path.join(HOME, 'token')
+    return open(f).read().strip() if os.path.exists(f) else None
+
+
+TEMPLATE = {
+    'providers': {
+        'gemini': {'type': 'gemini', 'model': 'gemini-3.8-flash', 'api_key': '${GEMINI_API_KEY}', 'note': '示例：换成你自己的模型；本地 embed 见 README'},
+    },
+    'embed': None,
+    'reviewers': [{'provider': 'gemini', 'jobs': 2}],
+    'projects': {},
+    'auto': {'check': True, 'review': True},
+}
+
+
+def init(projects=(), force=False):
+    """写 ~/.config/cocheck/config.json（已存在则只追加项目）和令牌文件。projects: [(名字, 适配器, 路径)]"""
+    import secrets
+    os.makedirs(HOME, exist_ok=True)
+    cf = os.path.join(HOME, 'config.json')
+    cfg = json.load(open(cf, encoding='utf-8')) if os.path.exists(cf) and not force else json.loads(json.dumps(TEMPLATE))
+    for name, adapter, path in projects:
+        cfg.setdefault('projects', {})[name] = {'adapter': adapter, 'path': os.path.abspath(os.path.expanduser(path))}
+    json.dump(cfg, open(cf, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    tf = os.path.join(HOME, 'token'); new = not os.path.exists(tf)
+    if new:
+        open(tf, 'w').write(secrets.token_hex(16)); os.chmod(tf, 0o600)
+    return cf, tf, new
