@@ -53,5 +53,31 @@ class Feedback(unittest.TestCase):
             self.assertFalse(any('b' in v for v in answered.values()))          # 第二个复核员没被唤起
         finally: e.close()
 
+    def test_manual_provider_shows_progress(self):
+        e = Env(n=3)
+        try:
+            e.engine.reg._p['slow'] = SlowAsk(); e.pr.spec['reviewers'] = False; e.open()
+            e.pr.request_review([{'provider': 'slow', 'by': 'm'}]); time.sleep(0.2)
+            self.assertTrue(e.pr.review_state['running']); self.assertEqual(e.pr.review_state['who'], 'm')
+            for _ in range(40):
+                if not e.pr.review_state['running']: break
+                time.sleep(0.05)
+            self.assertEqual(len(e.pr.store.load()['answers']), 3)
+        finally: e.close()
+
 
 if __name__ == '__main__': unittest.main()
+
+
+class HangingCLI(unittest.TestCase):
+    def test_collects_when_agent_does_not_exit(self):          # agy 写完答案不退出：交齐 5 秒后收卷
+        import sys, tempfile, os
+        from cocheck.providers.cli import CLIAgent
+        d = tempfile.mkdtemp(); img = os.path.join(d, 'a.png'); open(img, 'wb').write(b'x')
+        script = os.path.join(d, 'agent.py')
+        open(script, 'w').write("import json,time\nt=json.load(open('tickets.json'))\n"
+                                "json.dump({x['ticket']:{a['i']:'yes' for a in x['asks']} for x in t},open('answers.json','w'))\ntime.sleep(300)\n")
+        p = CLIAgent('hang', cmd='%s %s' % (sys.executable, script))
+        t0 = time.time(); got = []
+        out = p.ask_batch([dict(id='a-1', item='a', image=img, asks=[dict(i='0', k='el', q='?')])], 1, on_done=lambda tid, a: got.append(tid))
+        self.assertEqual(out, {'a-1': {'0': 'yes'}}); self.assertEqual(got, ['a-1']); self.assertLess(time.time() - t0, 30)
