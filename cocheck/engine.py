@@ -59,12 +59,15 @@ class Project:
         tickets = self.store.list_open(by, second or escalate, only)
         if not tickets: return dict(by=by, tickets=0, answered=0, seconds=0)
         t0 = time.time(); prov = self.e.reg.get(provider); s = self.review_state; s.update(done=0, total=len(tickets)); n = 0; jobs = max(1, int(jobs or 1))
-        for i in range(0, len(tickets), jobs):                     # 一批 jobs 张：每批后更新进度、检查取消
+        step = jobs * getattr(prov, 'per_call', 1)                 # 一批 jobs×per_call 张（命令行代理一次答几张）：每批后更新进度、检查取消
+        for i in range(0, len(tickets), step):
             if self._cancel: break
-            chunk = tickets[i:i + jobs]; ans = prov.ask_batch(chunk, jobs)
-            for t in chunk:
-                if t['id'] in ans: self.store.answer(t['id'], by, ans[t['id']]); n += 1
-            s['done'] = i + len(chunk)
+            chunk = tickets[i:i + step]; ids = {t['id'] for t in chunk}; got = []
+            def done(tid, a):
+                if tid in ids and tid not in got: got.append(tid); self.store.answer(tid, by, a); s['done'] += 1
+            ans = prov.ask_batch(chunk, jobs, on_done=done)
+            for tid, a in ans.items(): done(tid, a)                # 不支持回调的 provider 在这里补落盘
+            n += len(got)
         return dict(by=by, tickets=len(tickets), answered=n, seconds=round(time.time() - t0, 1), cancelled=self._cancel)
 
     # ---- 后台 ----
@@ -87,14 +90,15 @@ class Project:
         if s['running']: self._cancel = True
         return s
 
-    def request_review(self):
-        s = self.review_state; s['pending'] = True; self._cancel = False
+    def request_review(self, chain=None):
+        # chain：这次只跑这些复核员（手动指定 provider 时）；不给 = 项目配置的链。进度和取消同一套
+        s = self.review_state; s['pending'] = True; self._cancel = False; self._chain = chain
         if not s['running']: s['running'] = True; threading.Thread(target=self._review_loop, daemon=True).start()
 
     def _review_loop(self):
         s = self.review_state; s.update(started=time.strftime('%H:%M:%S'), cancelled=False)
         while s['pending'] and not self._cancel:
-            s['pending'] = False; chain = [r for r in self.reviewers() if not r.get('off')]
+            s['pending'] = False; chain = [r for r in (getattr(self, '_chain', None) or self.reviewers()) if not r.get('off')]
             for k, r in enumerate(chain):
                 if self._cancel: break
                 s.update(who=r.get('by') or r['provider'], step='%d/%d' % (k + 1, len(chain)), done=0, total=0)
@@ -103,7 +107,7 @@ class Project:
                     s.update(last='%s %s：%d 张，%ss' % (time.strftime('%H:%M:%S'), res['by'], res['answered'], res['seconds']), error=None)
                 except Exception as ex: s['error'] = '%s: %s' % (type(ex).__name__, ex)
         if self._cancel: s.update(cancelled=True, last='%s 已取消' % time.strftime('%H:%M:%S'))
-        self._cancel = False; s.update(running=False, who=None, step=None)
+        self._cancel = False; self._chain = None; s.update(running=False, who=None, step=None)
 
     def _mtime(self):
         try: return max(os.path.getmtime(f) for f in self.adapter.watch_files(self.path, **self.opts) if os.path.exists(f))
