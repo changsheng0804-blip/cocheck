@@ -41,6 +41,19 @@ cocheck status lan
 cocheck answer lan 3b-3c466394ad '{"0":"no"}' --by user
 ```
 
+## 给任何 AI 用（MCP）
+
+`cocheck mcp` 是零依赖的 stdio MCP 服务，薄壳转发到 `cocheck serve`，不加载模型。工具：
+`cocheck_projects`、`cocheck_status`、`cocheck_next_ticket`（直接附上画面图片，问配音时附音频）、`cocheck_answer`、`cocheck_check`、`cocheck_review`、`cocheck_providers`。
+
+```bash
+agy mcp add cocheck cocheck mcp --by agy                       # Antigravity CLI
+# Claude Desktop / Gemini CLI / Codex 的 mcpServers：
+# {"cocheck": {"command": "cocheck", "args": ["mcp", "--by", "claude"], "env": {"COCHECK_URL": "http://127.0.0.1:8796"}}}
+```
+
+然后对 AI 说「用 cocheck 把项目 lan 的待复核单都答完」即可；它答的票以 `--by` 的名字计入多人判定。
+
 ## 接到自己的页面
 
 ```html
