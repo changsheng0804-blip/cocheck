@@ -21,7 +21,7 @@ import base64, io, json, os, re, shutil, sys, tempfile, threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'web')
+WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 
 
 def dec_input(x):
