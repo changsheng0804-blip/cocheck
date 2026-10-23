@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+cocheck.json
+.cocheck/
+*.log
+doctor.txt
+serve.sh
