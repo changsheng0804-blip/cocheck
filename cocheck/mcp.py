@@ -54,7 +54,7 @@ class Client:
 
 
 def call(c, name, a, by):
-    pj = lambda: '/v1/projects/' + a['project']
+    pj = lambda: '/v1/projects/' + urllib.parse.quote(a['project'])
     txt = lambda o: [{'type': 'text', 'text': o if isinstance(o, str) else json.dumps(o, ensure_ascii=False, indent=1)}]
     if name == 'cocheck_projects': return txt(c.get('/v1/projects')['projects'])
     if name == 'cocheck_providers': return txt(c.get('/v1/providers'))
@@ -69,7 +69,7 @@ def call(c, name, a, by):
         return txt('\n'.join(lines))
     if name == 'cocheck_next_ticket':
         who = a.get('by') or by
-        ts = c.get(pj() + '/tickets?by=%s%s' % (who, '&hot=1' if a.get('hot') else ''))['tickets']
+        ts = c.get(pj() + '/tickets?by=%s%s' % (urllib.parse.quote(who), '&hot=1' if a.get('hot') else ''))['tickets']
         if not ts: return txt('没有待复核的单。')
         t = ts[0]; head = dict(ticket=t['id'], item=t['item'], remaining=len(ts) - 1, desc=t.get('desc'), asks=[dict(i=q['i'], q=q['q']) for q in t['asks']])
         if any(q['k'] in ('vo', 'poly') for q in t['asks']): head['text'] = t.get('text')
