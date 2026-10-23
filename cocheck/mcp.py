@@ -84,7 +84,26 @@ def call(c, name, a, by):
     raise RuntimeError('未知工具：' + name)
 
 
+def handle(c, m, by):
+    """处理一条 JSON-RPC 消息；通知返回 None。stdio 和 HTTP 两种传输共用。"""
+    mid, meth, p = m.get('id'), m.get('method'), m.get('params') or {}
+    if mid is None: return None                                  # 通知（notifications/initialized 等）不回
+    res = err = None
+    if meth == 'initialize':
+        res = {'protocolVersion': p.get('protocolVersion', PROTOCOL), 'capabilities': {'tools': {}},
+               'serverInfo': {'name': 'cocheck', 'version': '0.1.0'},
+               'instructions': '审核复核员：先 cocheck_projects 看项目，再循环 cocheck_next_ticket → 看图/听音逐题答 yes/no/unsure → cocheck_answer，直到没有单。'}
+    elif meth == 'ping': res = {}
+    elif meth == 'tools/list': res = {'tools': TOOLS}
+    elif meth == 'tools/call':
+        try: res = {'content': call(c, p['name'], p.get('arguments') or {}, by), 'isError': False}
+        except Exception as e: res = {'content': [{'type': 'text', 'text': '出错：%s' % e}], 'isError': True}
+    else: err = {'code': -32601, 'message': 'method not found: %s' % meth}
+    return {'jsonrpc': '2.0', 'id': mid, **({'error': err} if err else {'result': res})}
+
+
 def serve(url, by='mcp', token=None, inp=sys.stdin, out=sys.stdout):
+    """stdio 传输：一行一条 JSON-RPC。"""
     c = Client(url, token)
     send = lambda m: (out.write(json.dumps(m, ensure_ascii=False) + '\n'), out.flush())
     for line in inp:
@@ -92,17 +111,5 @@ def serve(url, by='mcp', token=None, inp=sys.stdin, out=sys.stdout):
         if not line: continue
         try: m = json.loads(line)
         except Exception: send({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'parse error'}}); continue
-        mid, meth, p = m.get('id'), m.get('method'), m.get('params') or {}
-        if mid is None: continue                                   # 通知（notifications/initialized 等）不回
-        res = err = None
-        if meth == 'initialize':
-            res = {'protocolVersion': p.get('protocolVersion', PROTOCOL), 'capabilities': {'tools': {}},
-                   'serverInfo': {'name': 'cocheck', 'version': '0.1.0'},
-                   'instructions': '审核复核员：先 cocheck_projects 看项目，再循环 cocheck_next_ticket → 看图/听音逐题答 yes/no/unsure → cocheck_answer，直到没有单。'}
-        elif meth == 'ping': res = {}
-        elif meth == 'tools/list': res = {'tools': TOOLS}
-        elif meth == 'tools/call':
-            try: res = {'content': call(c, p['name'], p.get('arguments') or {}, by), 'isError': False}
-            except Exception as e: res = {'content': [{'type': 'text', 'text': '出错：%s' % e}], 'isError': True}
-        else: err = {'code': -32601, 'message': 'method not found: %s' % meth}
-        send({'jsonrpc': '2.0', 'id': mid, **({'error': err} if err else {'result': res})})
+        r = handle(c, m, by)
+        if r: send(r)
