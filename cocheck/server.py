@@ -14,6 +14,8 @@
   POST /v1/projects/<p>/check              立即体检
   POST /v1/projects/<p>/review {provider?, jobs?, escalate?}   不给 provider = 按配置的复核员链跑
 网页组件：GET /cocheck-strip.js
+MCP（Streamable HTTP）：POST /mcp   远端 AI 直接接：{"url": "http://<主机>:8796/mcp", "headers": {"Authorization": "Bearer <token>"}}
+  复核员名字用请求头 X-Cocheck-By 或 URL ?by=，缺省 mcp-http。
 """
 import base64, io, json, os, re, shutil, sys, tempfile, threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -31,14 +33,16 @@ def dec_input(x):
     return {'audio': np.frombuffer(base64.b64decode(x['audio_f32']), dtype=np.float32)}
 
 
-def make_handler(engine, token=None):
+def make_handler(engine, token=None, self_url='http://127.0.0.1:8796'):
+    from . import mcp
+    mcp_client = mcp.Client(self_url, token)
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a): pass
 
         def _send(self, obj, code=200, ctype='application/json; charset=utf-8', raw=None):
             b = raw if raw is not None else json.dumps(obj, ensure_ascii=False).encode()
             self.send_response(code); self.send_header('Content-Type', ctype); self.send_header('Content-Length', str(len(b)))
-            self.send_header('Access-Control-Allow-Origin', '*'); self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+            self.send_header('Access-Control-Allow-Origin', '*'); self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, X-Cocheck-By')
             self.end_headers(); self.wfile.write(b)
 
         def do_OPTIONS(self): self._send({}, 204, raw=b'')
@@ -50,8 +54,10 @@ def make_handler(engine, token=None):
             n = int(self.headers.get('Content-Length') or 0); return json.loads(self.rfile.read(n) or b'{}')
 
         def do_GET(self):
+            if self.path.split('?')[0] != '/cocheck-strip.js' and not self._auth(): return self._send({'error': 'unauthorized'}, 401)
             u = urlparse(self.path); q = {k: v[0] for k, v in parse_qs(u.query).items()}; p = u.path.rstrip('/')
             try:
+                if p == '/mcp': return self._send({'error': '用 POST'}, 405)
                 if p == '/v1/providers': return self._send(dict(providers=engine.reg.info(), embed=engine.cfg.get('embed'), reviewers=engine.cfg.get('reviewers')))
                 if p == '/v1/projects': return self._send(dict(projects=[x.summary() for x in engine.projects.values()]))
                 if p == '/cocheck-strip.js':
@@ -82,9 +88,15 @@ def make_handler(engine, token=None):
 
         def do_POST(self):
             if not self._auth(): return self._send({'error': 'unauthorized'}, 401)
-            p = urlparse(self.path).path.rstrip('/')
+            u = urlparse(self.path); p = u.path.rstrip('/')
             try:
                 b = self._body()
+                if p == '/mcp':                                    # MCP Streamable HTTP：单条或批量 JSON-RPC，直接回 JSON
+                    by = self.headers.get('X-Cocheck-By') or parse_qs(u.query).get('by', ['mcp-http'])[0]
+                    msgs = b if isinstance(b, list) else [b]
+                    out = [r for r in (mcp.handle(mcp_client, m, by) for m in msgs) if r]
+                    if not out: return self._send({}, 202, raw=b'')
+                    return self._send(out if isinstance(b, list) else out[0])
                 if p == '/v1/embed':
                     prov = engine.reg.get(b.get('provider') or engine.cfg.get('embed'))
                     V = prov.embed([dec_input(x) for x in b['inputs']], prompt=b.get('prompt'), image_tokens=b.get('image_tokens'))
@@ -115,6 +127,8 @@ def make_handler(engine, token=None):
 
 
 def serve(engine, host='127.0.0.1', port=8796, token=None):
+    if host not in ('127.0.0.1', 'localhost', '::1') and not token:
+        raise SystemExit('对外开放（--host %s）必须设令牌：--token 或环境变量 COCHECK_TOKEN' % host)
     engine.watch()
     print('cocheck: http://%s:%d  项目：%s  provider：%s' % (host, port, ', '.join(engine.projects) or '无', ', '.join(engine.reg.names()) or '无'), flush=True)
-    ThreadingHTTPServer((host, port), make_handler(engine, token)).serve_forever()
+    ThreadingHTTPServer((host, port), make_handler(engine, token, 'http://127.0.0.1:%d' % port)).serve_forever()
