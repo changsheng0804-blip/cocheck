@@ -9,7 +9,10 @@ def items(path, **_):
     for f in sorted(os.listdir(path)):
         stem, ext = os.path.splitext(f)
         if ext.lower() not in IMG: continue
-        rd = lambda s: open(os.path.join(path, s), encoding='utf-8').read().strip() if os.path.exists(os.path.join(path, s)) else None
+        def rd(s):
+            f = os.path.join(path, s)
+            if not os.path.exists(f): return None
+            with open(f, encoding='utf-8') as fh: return fh.read().strip()
         au = next((os.path.join(path, stem + e) for e in ('.mp3', '.wav') if os.path.exists(os.path.join(path, stem + e))), None)
         out.append(dict(id=stem, image=os.path.join(path, f), audio=au, desc=rd(stem + '.txt'), text=rd(stem + '.vo.txt')))
     return out
