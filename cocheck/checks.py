@@ -78,11 +78,13 @@ class Reflex:
         cp, cn = refs; T = self.tiles(path)[1:]; s = T @ cp - T @ cn
         return dict(score=round(float(s.max()), 4), tile=int(s.argmax()), flag=bool(s.max() > thr))
 
+    SOUND = re.compile(r'声|音乐|配乐|音效|旋律|静默|静音|安静|听|嗡|钢片琴|鼓点|磁带|节拍|风声|海浪声')
     @staticmethod
     def elements(what):
         w = re.sub(r'[（(][^）)]*[）)]', '', what or '')
         w = re.sub(r'(?<=\d),(?=\d)', '', w)  # 1,000,000 不拆
-        return [x.strip() for x in re.split(r'[，、；。,;]', w) if len(x.strip()) >= 3][:6]
+        # 声音描述不是画面元素（写进条目的 sound 字段更好），抽视觉题时跳过
+        return [x.strip() for x in re.split(r'[，、；。,;：:]', w) if len(x.strip()) >= 3 and not Reflex.SOUND.search(x)][:6]
 
     def coverage(self, beats, images, miss_rank=3, bad_rank=10, swap_frac=0.6):
         """beats: [(id, what)], images: [path] 同序；每个元素在全片块里排第几"""
