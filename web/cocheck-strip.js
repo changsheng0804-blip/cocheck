@@ -38,7 +38,7 @@
     const hd = { 'Content-Type': 'application/json' }; if (token) hd.Authorization = 'Bearer ' + token;
     const post = (p, b) => fetch(base + p, { method: 'POST', headers: hd, body: JSON.stringify(b || {}) }).then((r) => r.json());
     return {
-      status: () => fetch(base + '/status').then((r) => r.json()),
+      status: () => fetch(base + '/status', { headers: token ? { Authorization: 'Bearer ' + token } : {} }).then((r) => r.json()),
       answer: (ticket, by, answers, note) => post('/answer', { ticket, by, answers, note }),
       check: () => post('/check'), review: (o) => post('/review', o),
       judge(s, bad) { const a = {}; for (const q of s.asks) a[q.i] = (q.k === 'text') === bad ? 'yes' : 'no'; return this.answer(s.ticket, 'user', a); },
