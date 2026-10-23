@@ -58,18 +58,28 @@ def doctor(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='cocheck'); ap.add_argument('--config')
     sub = ap.add_subparsers(dest='cmd', required=True)
+    s = sub.add_parser('init', help='写用户配置和令牌'); s.add_argument('--project', action='append', default=[], help='名字=路径[@适配器]，适配器 cocut/items/folder，缺省 cocut')
+    s.add_argument('--force', action='store_true')
     s = sub.add_parser('doctor'); s.add_argument('--ping', action='store_true')
     sub.add_parser('providers')
     s = sub.add_parser('serve'); s.add_argument('--host', default='127.0.0.1'); s.add_argument('--port', type=int, default=8796)
-    s.add_argument('--project', action='append'); s.add_argument('--token', default=os.environ.get('COCHECK_TOKEN'))
+    s.add_argument('--project', action='append'); s.add_argument('--token', default=C.token())
     s = sub.add_parser('mcp'); s.add_argument('--url', default=os.environ.get('COCHECK_URL', 'http://127.0.0.1:8796'))
-    s.add_argument('--by', default=os.environ.get('COCHECK_BY', 'mcp')); s.add_argument('--token', default=os.environ.get('COCHECK_TOKEN'))
+    s.add_argument('--by', default=os.environ.get('COCHECK_BY', 'mcp')); s.add_argument('--token', default=C.token())
     s = sub.add_parser('check'); s.add_argument('project')
     s = sub.add_parser('review'); s.add_argument('project'); s.add_argument('--provider'); s.add_argument('--jobs', type=int, default=1)
     s.add_argument('--escalate', action='store_true'); s.add_argument('--second', action='store_true'); s.add_argument('--by')
     s = sub.add_parser('status'); s.add_argument('project')
     s = sub.add_parser('answer'); s.add_argument('project'); s.add_argument('ticket'); s.add_argument('answers'); s.add_argument('--by', required=True); s.add_argument('--note')
     a = ap.parse_args(argv)
+    if a.cmd == 'init':
+        ps = []
+        for x in a.project:
+            n, _, rest = x.partition('='); path, _, ad = rest.rpartition('@') if '@' in rest else (rest, '', '')
+            ps.append((n, ad or 'cocut', path))
+        cf, tf, new = C.init(ps, a.force)
+        print('配置：%s\n令牌：%s%s\n下一步：编辑配置里的 providers（密钥写成 ${环境变量}），然后 cocheck doctor、cocheck serve' % (cf, tf, '（新生成）' if new else '（沿用）'))
+        return
     if a.cmd == 'doctor': return doctor(a)
     if a.cmd == 'mcp':
         from .mcp import serve as mcp_serve; return mcp_serve(a.url, a.by, a.token)
