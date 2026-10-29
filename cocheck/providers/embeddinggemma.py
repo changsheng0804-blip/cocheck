@@ -22,8 +22,16 @@ def pick_backend(want='auto'):
 
 
 class _MLX:
-    """mlx-vlm 版，与 SentenceTransformer.encode 同口径：提示词前缀 + 媒体占位符，均值池化 + L2 归一。"""
+    """mlx-vlm 版，与 SentenceTransformer.encode 同口径：提示词前缀 + 媒体占位符，均值池化 + L2 归一。
+    MLX 的 GPU 流绑定线程，加载和推理都放在一个专用线程里（服务的请求来自不同线程）。"""
     def __init__(self, model):
+        from concurrent.futures import ThreadPoolExecutor
+        self._ex = ThreadPoolExecutor(1); self._ex.submit(self._load, model).result()
+
+    def encode(self, *a, **k):
+        return self._ex.submit(self._encode, *a, **k).result()
+
+    def _load(self, model):
         import json
         from huggingface_hub import snapshot_download
         from mlx_vlm import load
@@ -37,7 +45,7 @@ class _MLX:
         out = self.model(**{k: mx.array(v) for k, v in dict(inp).items()})
         return np.array(out.text_embeds.astype(mx.float32))
 
-    def encode(self, items, prompt_name=None, max_soft_tokens=None, batch_size=8):
+    def _encode(self, items, prompt_name=None, max_soft_tokens=None, batch_size=8):
         import numpy as np
         pre = self.prompts.get(prompt_name, '') if prompt_name else ''
         kind = lambda x: 'text' if isinstance(x, str) else ('image' if 'image' in x else 'audio')
@@ -55,6 +63,8 @@ class _MLX:
                 else:
                     inp = self.proc(text=[pre + '<|audio|>'] * len(b), audio=[[items[n]['audio']] for n in b], return_tensors='np', padding=True)
                 for n, e in zip(b, self._run(inp)): res[n] = e
+        import mlx.core as mx
+        mx.clear_cache()  # 释放推理缓存，常驻内存只留权重（约 2.2 GB）
         E = np.stack(res); return E / np.linalg.norm(E, axis=1, keepdims=True)
 
     @staticmethod
