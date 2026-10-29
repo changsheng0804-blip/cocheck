@@ -35,4 +35,16 @@ class Parse(unittest.TestCase):
         with self.assertRaises(ValueError): build('x', {'type': 'nope'})
 
 
+
+
+class BackendPick(unittest.TestCase):
+    def test_pick(self):
+        from unittest import mock
+        from cocheck.providers import embeddinggemma as eg
+        self.assertEqual(eg.pick_backend('torch'), 'torch'); self.assertEqual(eg.pick_backend('mlx'), 'mlx')
+        with mock.patch.object(eg, 'apple_silicon', return_value=False): self.assertEqual(eg.pick_backend(), 'torch')
+        with mock.patch.object(eg, 'apple_silicon', return_value=True), mock.patch.dict('sys.modules', {'mlx_vlm': object()}):
+            self.assertEqual(eg.pick_backend(), 'mlx')
+
+
 if __name__ == '__main__': unittest.main()
