@@ -46,5 +46,29 @@ class BackendPick(unittest.TestCase):
         with mock.patch.object(eg, 'apple_silicon', return_value=True), mock.patch.dict('sys.modules', {'mlx_vlm': object()}):
             self.assertEqual(eg.pick_backend(), 'mlx')
 
+class RemoteEnsure(unittest.TestCase):
+    def test_ensure_then_retry(self):
+        import os, tempfile, threading, json
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+        from cocheck.providers.remote import Remote
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                b = json.dumps({'providers': [{'name': 'eg2'}]}).encode()
+                self.send_response(200); self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b)
+            def log_message(self, *a): pass
+        srv = HTTPServer(('127.0.0.1', 0), H); port = srv.server_port; srv.server_close()   # 先占号再放掉：此时连不上
+        flag = os.path.join(tempfile.mkdtemp(), 'up')
+        holder = {}
+        def start():
+            holder['s'] = s = HTTPServer(('127.0.0.1', port), H); threading.Thread(target=s.serve_forever, daemon=True).start()
+        import cocheck.providers.remote as R
+        real = R.subprocess.run
+        def fake_run(cmd, **k):
+            start(); open(flag, 'w').close(); return real('true', **k)
+        with mock.patch.object(R.subprocess, 'run', fake_run):
+            p = Remote('eg2', base_url='http://127.0.0.1:%d' % port, ensure='loco ensure eg2')
+            self.assertTrue(p.ping()['ok']); self.assertTrue(os.path.exists(flag))
+        holder['s'].shutdown()
+
 
 if __name__ == '__main__': unittest.main()
