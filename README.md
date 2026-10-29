@@ -17,7 +17,7 @@
 
 | 能力 | 含义 | 现有类型 |
 |---|---|---|
-| `embed` | 文字/图/音 → 向量（体检用） | `local_embed`（sentence-transformers，默认 EmbeddingGemma 2）、`remote` |
+| `embed` | 文字/图/音 → 向量（体检用） | `local_embed`（默认 EmbeddingGemma 2；苹果芯片自动走 MLX，其他机器走 torch）、`remote` |
 | `ask` | 看图/听音答点名是非题（复核用） | `gemini`（AI Studio / Vertex / 本地桥）、`openai`（OpenAI、OpenRouter、vLLM、LM Studio、Ollama…）、`cli`（agy、gemini、claude、codex 等能读文件的命令行代理）、`remote` |
 
 `remote` 指向另一台机器上的 cocheck：模型装在一台有 GPU/MPS 的机器上，其他机器和用户都连它。新增一种模型接入 = 在 `cocheck/providers/` 写一个类、在注册表加一行。密钥只放环境变量，配置里写 `${GEMINI_API_KEY}`。
@@ -26,7 +26,7 @@
 
 ```bash
 pip install "git+ssh://git@github.com/changsheng0804-blip/cocheck.git"            # 基础：复核、服务、MCP
-pip install "cocheck[local,tts] @ git+ssh://git@github.com/changsheng0804-blip/cocheck.git"   # 加本地向量模型体检和多音字检查（需 ffmpeg）
+pip install "cocheck[local,tts] @ git+ssh://git@github.com/changsheng0804-blip/cocheck.git"   # 加本地向量模型体检和多音字检查（需 ffmpeg）；苹果芯片只装 MLX，不装 torch
 cocheck init --project lan=~/films/lan@cocut   # 写 ~/.config/cocheck/config.json 和令牌文件；适配器 cocut/items/folder
 cocheck doctor --ping            # 环境自检：依赖、设备、配置、每个模型是否连得上
 cocheck serve                    # http://127.0.0.1:8796
