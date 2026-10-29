@@ -17,7 +17,8 @@ from .engine import Engine
 
 def _engine(a):
     cfg = C.load(a.config); e = Engine(cfg)
-    for spec in getattr(a, 'project', None) or []:
+    specs = getattr(a, 'project', None)
+    for spec in (specs if isinstance(specs, list) else []):   # 子命令的位置参数 project 会覆盖全局 --project（字符串），别逐字符拆
         name, rest = spec.split('=', 1); ad, path = rest.split(':', 1); e.add_project(name, dict(adapter=ad, path=path))
     return e
 
@@ -32,12 +33,16 @@ def _proj(e, ref):
 def doctor(a):
     ok = lambda b: '✓' if b else '✗'; rows = []
     rows.append(('python', ok(sys.version_info >= (3, 9)), platform.python_version()))
-    for mod, why in [('numpy', '体检'), ('PIL', '体检（切块）'), ('torch', '本地向量模型'), ('sentence_transformers', '本地向量模型'), ('edge_tts', '多音字参照合成')]:
+    from .providers.embeddinggemma import apple_silicon, pick_backend
+    local = [('mlx_vlm', '本地向量模型（苹果芯片走 MLX）')] if apple_silicon() else [('torch', '本地向量模型'), ('sentence_transformers', '本地向量模型')]
+    for mod, why in [('numpy', '体检'), ('PIL', '体检（切块）')] + local + [('edge_tts', '多音字参照合成')]:
         try: m = importlib.import_module(mod); rows.append((mod, '✓', getattr(m, '__version__', '')))
         except Exception: rows.append((mod, '–', '缺，影响：' + why))
-    try:
-        import torch; rows.append(('device', '✓', 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu（慢）'))
-    except Exception: pass
+    if pick_backend() == 'mlx': rows.append(('device', '✓', 'MLX（Metal）'))
+    else:
+        try:
+            import torch; rows.append(('device', '✓', 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu（慢）'))
+        except Exception: pass
     rows.append(('ffmpeg', ok(shutil.which('ffmpeg')), shutil.which('ffmpeg') or '缺，影响：配音检查'))
     cfg = C.load(a.config); rows.append(('config', ok(cfg['_path']), cfg['_path'] or '没找到配置文件（cocheck.json 或 ~/.config/cocheck/config.json）'))
     e = Engine(cfg)
